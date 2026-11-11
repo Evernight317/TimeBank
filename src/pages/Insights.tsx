@@ -1,152 +1,141 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../lib/store'
-import { buildInsights, buildPersona, formatHour } from '../lib/insights'
-import { fmtMinutes } from '../lib/date'
-import { Card, Empty, SectionHead, Segmented, Tag } from '../components/ui'
+import { buildInsights, todayHighlight } from '../lib/insights'
+import { fmtDateCN, fmtMinutes, addDays, toISODate, todayISO } from '../lib/date'
+import { BrandHeader, PageHead } from '../components/nav'
+import { Button, Segmented } from '../components/ui'
 import { Icon } from '../components/icons'
+import { categoryMinutes, logsBetween, minutesOn, tasksBetween } from '../lib/analytics'
 
-type Span = '7' | '14' | '30'
+type Tab = 'week' | 'daily'
 
-const TYPE_LABEL: Record<string, string> = {
-  bias: '估算校准',
-  rhythm: '节律',
-  delay: '执行力',
-  blackhole: '时间黑洞',
-  summary: '周期总结',
-}
+const STYLE_BY_INDEX = ['dark', 'warm', 'cool', 'plain', 'plain']
 
 export function InsightsPage() {
   const { state } = useApp()
-  const [span, setSpan] = useState<Span>('14')
-  const days = Number(span)
+  const [tab, setTab] = useState<Tab>('week')
 
-  const insights = useMemo(() => buildInsights(state, { days }), [state, days])
-  const persona = useMemo(() => buildPersona(state, { days: 30 }), [state])
+  const today = todayISO()
+  const from = toISODate(addDays(new Date(), -6))
+  const insights = useMemo(() => buildInsights(state, { days: 7 }), [state])
+
+  const todayLogs = logsBetween(state.logs, today, today)
+  const todayTotal = minutesOn(state.logs, today)
+  const split = categoryMinutes(todayLogs)
+  const todayTasks = tasksBetween(state.tasks, today, today)
+  const done = todayTasks.filter((t) => t.status === 'done').length
 
   return (
-    <div className="page">
-      <div className="topbar">
-        <div>
-          <span className="eyebrow">AI 时间洞察</span>
-          <h1 className="page-title">看见你自己看不见的规律</h1>
-          <p className="page-sub">
-            不是告诉你「应该怎样生活」，而是从你的真实记录里，指出那些你凭感觉发现不了的事实。
-          </p>
-        </div>
-        <div className="topbar-actions">
-          <Segmented<Span>
-            value={span}
-            onChange={setSpan}
-            options={[
-              { value: '7', label: '近 7 天' },
-              { value: '14', label: '近 14 天' },
-              { value: '30', label: '近 30 天' },
-            ]}
-          />
-        </div>
-      </div>
-
-      <Card
-        className="insight-hero"
-        style={{
-          marginBottom: 16,
-          background:
-            'radial-gradient(500px 220px at 100% 0%, rgba(14,107,79,.10), transparent 70%), linear-gradient(150deg,#fbfcfa,#f2f6f4)',
-          borderColor: '#d9e6df',
-        }}
-      >
-        <div className="row" style={{ gap: 16, alignItems: 'flex-start' }}>
-          <div
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 13,
-              background: 'var(--accent)',
-              color: '#f7f6f2',
-              display: 'grid',
-              placeItems: 'center',
-              flex: 'none',
-            }}
+    <div className="screen">
+      <BrandHeader
+        right={
+          <button
+            className="round-btn solid"
+            onClick={() => (window.location.hash = '#/create')}
+            aria-label="创建日程"
           >
-            <Icon name="spark" size={20} />
-          </div>
-          <div>
-            <strong style={{ fontSize: 15 }}>基于 {days} 天真实记录的分析</strong>
-            <p className="muted" style={{ fontSize: 13, marginTop: 4, maxWidth: 720 }}>
-              你的高效窗口是 {formatHour(persona.peak.start)}—{formatHour(persona.peak.end)}，单次最佳专注约{' '}
-              {persona.focusMinutes} 分钟。下面每一条洞察，都来自你自己的数据，而不是通用建议。
-            </p>
-          </div>
-        </div>
-      </Card>
+            <Icon name="plus" size={17} />
+          </button>
+        }
+      />
 
-      {insights.length === 0 ? (
-        <Card>
-          <Empty
-            title="数据还不足以形成洞察"
-            hint="连续记录 3–5 天后，这里会自动出现关于你的时间偏差、节律与黑洞的分析。"
-          />
-        </Card>
-      ) : (
-        <div className="grid grid-2">
-          {insights.map((ins) => (
-            <article key={ins.id} className={`insight tone-${ins.tone}`}>
-              <div className="row between">
-                <Tag tone={ins.tone === 'neutral' ? 'accent' : ins.tone}>{ins.tag}</Tag>
-                <span className="faint" style={{ fontSize: 11 }}>
-                  {TYPE_LABEL[ins.type] ?? '分析'}
-                </span>
-              </div>
-              {ins.metric && <div className="metric">{ins.metric}</div>}
-              <h3>{ins.title}</h3>
-              <p>{ins.body}</p>
-            </article>
-          ))}
-        </div>
-      )}
+      <PageHead title="不止记录，更懂你" sub="AI 时间洞察 · 最近 7 天" />
 
-      <div className="grid grid-3" style={{ marginTop: 16 }}>
-        <Card>
-          <SectionHead title="数据基础" hint="洞察的可信度取决于样本" />
-          <div className="row" style={{ gap: 26 }}>
-            <div>
-              <div className="stat-value">{state.logs.length}</div>
-              <div className="stat-label">条时间记录</div>
-            </div>
-            <div>
-              <div className="stat-value">{state.tasks.length}</div>
-              <div className="stat-label">项安排</div>
-            </div>
-            <div>
-              <div className="stat-value">{fmtMinutes(
-                state.logs.reduce((s, l) => s + l.minutes, 0),
-              )}</div>
-              <div className="stat-label">累计记录</div>
-            </div>
-          </div>
-        </Card>
+      <Segmented<Tab>
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'week', label: '本周洞察' },
+          { value: 'daily', label: '每日回顾' },
+        ]}
+      />
 
-        <Card>
-          <SectionHead title="洞察怎么来的" hint="可解释，而非黑箱" />
-          <ul className="muted" style={{ paddingLeft: 18, fontSize: 12.5, lineHeight: 1.9, margin: 0 }}>
-            <li>对比每项安排的计划时长与实际记录，计算偏差率</li>
-            <li>按上午 / 下午 / 晚上切分完成率，寻找节律差异</li>
-            <li>统计延期发生的星期分布，识别结构性原因</li>
-            <li>累计各类别的正偏差，定位时间黑洞</li>
-          </ul>
-        </Card>
-
-        <Card>
-          <SectionHead title="下一步" hint="从洞察到行动" />
-          <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85 }}>
-            选一条你最有共鸣的洞察，回到「预算」调整下周的分配，或在下一次安排时把预计时长改得更接近历史均值。
+      {tab === 'week' ? (
+        <>
+          <p className="footnote" style={{ textAlign: 'left', margin: '12px 2px 12px' }}>
+            {fmtDateCN(from)} — {fmtDateCN(today)} · 根据你的时间记录生成
           </p>
-          <div className="notice" style={{ marginTop: 12 }}>
-            <Icon name="spark" size={15} />
-            <span>系统会随着使用越来越懂你。</span>
+
+          {insights.length === 0 ? (
+            <div className="card">
+              <p className="muted" style={{ fontSize: 12 }}>
+                数据还不足以形成洞察，先连续记录几天。
+              </p>
+            </div>
+          ) : (
+            insights.map((ins, i) => {
+              const style = STYLE_BY_INDEX[i] ?? 'plain'
+              return (
+                <article key={ins.id} className={`insight-card ${style}`}>
+                  <div className="no">
+                    <b>{String(i + 1).padStart(2, '0')}</b> / {ins.tag}
+                  </div>
+                  {ins.metric && <div className="figure" style={style === 'dark' ? { color: '#f4f7fa' } : undefined}>{ins.metric}</div>}
+                  <h3>{ins.title}</h3>
+                  <p>{ins.body}</p>
+                </article>
+              )
+            })
+          )}
+
+          <p className="insight-foot">
+            AI 提供观察和建议，如何调整由你决定。
+            <br />
+            所有结论都来自你自己的记录，而不是通用建议。
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="insight-card dark" style={{ marginTop: 12 }}>
+            <div className="no">
+              <b>今日</b> / 回顾
+            </div>
+            <div className="figure" style={{ color: '#f4f7fa' }}>
+              {fmtMinutes(todayTotal)}
+              <em style={{ color: 'rgba(244,247,250,.6)' }}>已记录</em>
+            </div>
+            <h3>今天的时间，正在变成数据</h3>
+            <p>{todayHighlight(state)}</p>
           </div>
-        </Card>
-      </div>
+
+          <div className="metric-grid">
+            <div className="metric-cell">
+              <div className="k">完成安排</div>
+              <div className="v">
+                {done}
+                <small>/ {todayTasks.length}</small>
+              </div>
+              <div className="d">已完成 / 已安排</div>
+            </div>
+            <div className="metric-cell">
+              <div className="k">有效投入</div>
+              <div className="v">
+                {fmtMinutes((split.study ?? 0) + (split.work ?? 0))}
+              </div>
+              <div className="d">学习 + 工作</div>
+            </div>
+            <div className="metric-cell">
+              <div className="k">娱乐</div>
+              <div className="v">{fmtMinutes(split.entertainment ?? 0)}</div>
+              <div className="d">含短视频等</div>
+            </div>
+            <div className="metric-cell">
+              <div className="k">未记录</div>
+              <div className="v">{fmtMinutes(Math.max(0, 1440 - todayTotal))}</div>
+              <div className="d">空白也是一种信息</div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <Button block onClick={() => (window.location.hash = '#/replay')}>
+              <Icon name="replay" size={15} />
+              回放今天的时间轴
+            </Button>
+          </div>
+
+          <p className="insight-foot">每日回顾会在每天结束后自动更新。</p>
+        </>
+      )}
     </div>
   )
 }

@@ -1,11 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { CategoryId } from '../types'
-import { CATEGORIES } from '../data/categories'
+import { CATEGORIES, CATEGORY_MAP } from '../data/categories'
 import { useApp } from '../lib/store'
 import { weekRange, weekUsedByCategory } from '../lib/analytics'
 import { fmtDateCN, fmtMinutes } from '../lib/date'
-import { Button, Card, SectionHead, Stat, Tag } from '../components/ui'
-import { Donut } from '../components/charts'
+import { BrandHeader, PageHead } from '../components/nav'
+import { Button } from '../components/ui'
 import { Icon } from '../components/icons'
 
 const RECOMMENDED: Record<CategoryId, number> = {
@@ -20,164 +20,191 @@ const RECOMMENDED: Record<CategoryId, number> = {
   other: 8 * 60,
 }
 
+const FLEX_CATEGORIES: CategoryId[] = [
+  'study',
+  'work',
+  'exercise',
+  'social',
+  'entertainment',
+  'commute',
+  'chores',
+  'other',
+]
+
 export function BudgetPage() {
   const { state, setBudget } = useApp()
+  const [editing, setEditing] = useState(false)
   const used = useMemo(() => weekUsedByCategory(state.logs), [state.logs])
   const week = weekRange()
 
-  const rows = CATEGORIES.map((c) => {
-    const budget = state.budgets.find((b) => b.category === c.id)?.weeklyMinutes ?? 0
-    const spent = used[c.id]
-    return { ...c, budget, spent, ratio: budget ? spent / budget : 0, left: budget - spent }
+  const rows = FLEX_CATEGORIES.map((id) => {
+    const budget = state.budgets.find((b) => b.category === id)?.weeklyMinutes ?? 0
+    const spent = used[id]
+    return {
+      ...CATEGORY_MAP[id],
+      id,
+      budget,
+      spent,
+      left: budget - spent,
+    }
   })
 
-  const totalBudget = rows.reduce((s, r) => s + r.budget, 0)
-  const totalSpent = rows.reduce((s, r) => s + r.spent, 0)
-  const over = rows.filter((r) => r.budget > 0 && r.spent > r.budget)
-  const available = 7 * 24 * 60 - (rows.find((r) => r.id === 'sleep')?.budget ?? 0)
-
-  const slices = rows
-    .filter((r) => r.spent > 0)
-    .map((r) => ({ id: r.id, label: r.label, value: r.spent, color: r.color }))
-    .sort((a, b) => b.value - a.value)
+  const available = rows.reduce((s, r) => s + r.budget, 0)
+  const spent = rows.reduce((s, r) => s + r.spent, 0)
+  const left = Math.max(0, available - spent)
+  const over = rows.filter((r) => r.spent > r.budget)
 
   return (
-    <div className="page">
-      <div className="topbar">
+    <div className="screen">
+      <BrandHeader
+        right={
+          <button
+            className="round-btn solid"
+            onClick={() => (window.location.hash = '#/create')}
+            aria-label="创建日程"
+          >
+            <Icon name="plus" size={17} />
+          </button>
+        }
+      />
+
+      <PageHead
+        title="给重要的事留点时间"
+        sub={`时间预算 · ${fmtDateCN(week.from)} – ${fmtDateCN(week.to)}`}
+      />
+
+      <section className="hero">
+        <div className="hero-row">
+          <div>
+            <div className="hero-label">本周可支配时间</div>
+            <div className="hero-big">
+              {Math.round(available / 60)}
+              <em>小时</em>
+            </div>
+          </div>
+          <div className="hero-side">
+            24h
+            <strong>每日本金</strong>
+          </div>
+        </div>
+        <div className="hero-bar">
+          <span style={{ width: `${Math.min(100, (spent / Math.max(1, available)) * 100)}%` }} />
+        </div>
+        <div className="hero-foot">
+          <span>
+            已使用 <b>{fmtMinutes(spent)}</b>
+          </span>
+          <span>
+            剩余 <b>{fmtMinutes(left)}</b>
+          </span>
+        </div>
+        <button className="hero-btn" onClick={() => setEditing((v) => !v)}>
+          <span>{editing ? '完成调整' : '调整预算'}</span>
+          <span className="mic">
+            <Icon name={editing ? 'check' : 'settings'} size={14} />
+          </span>
+        </button>
+      </section>
+
+      <section className="block">
+        <div className="block-head">
+          <h2>我的时间分配</h2>
+          <span className="meta">使用 / 预算</span>
+        </div>
+        <div className="card">
+          <div className="budget-list">
+            {rows.map((r) => {
+              const ratio = r.budget ? Math.min(1, r.spent / r.budget) : 0
+              const isOver = r.budget > 0 && r.spent > r.budget
+              return (
+                <div className="budget-row" key={r.id}>
+                  <div className="top" style={{ gridColumn: '1 / -1' }}>
+                    <span className="budget-name">
+                      <span className="dot" style={{ background: r.color }} />
+                      {r.label}
+                    </span>
+                    {editing ? (
+                      <span className="budget-step">
+                        <button
+                          className="step-btn"
+                          aria-label={`减少${r.label}预算`}
+                          onClick={() => setBudget(r.id, Math.max(0, r.budget - 30))}
+                        >
+                          −
+                        </button>
+                        <span className="budget-num">
+                          <b>{fmtMinutes(r.budget)}</b>
+                        </span>
+                        <button
+                          className="step-btn"
+                          aria-label={`增加${r.label}预算`}
+                          onClick={() => setBudget(r.id, r.budget + 30)}
+                        >
+                          +
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="budget-num">
+                        <b>{fmtMinutes(r.spent)}</b> / {fmtMinutes(r.budget)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="bar" style={{ gridColumn: '1 / -1', marginTop: 7 }}>
+                    <div className="progress" style={{ height: 6 }}>
+                      <span
+                        style={{
+                          width: `${ratio * 100}%`,
+                          background: isOver ? 'var(--red)' : r.color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div
+                    className="row between"
+                    style={{ gridColumn: '1 / -1', marginTop: 6 }}
+                  >
+                    <span className="faint" style={{ fontSize: 10.5 }}>
+                      {isOver ? `超出 ${fmtMinutes(r.spent - r.budget)}` : `剩余 ${fmtMinutes(Math.max(0, r.left))}`}
+                    </span>
+                    <span className="faint" style={{ fontSize: 10.5 }}>
+                      {Math.round((r.spent / Math.max(1, r.budget)) * 100)}%
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      <div className="tip" style={{ marginTop: 14 }}>
+        <span className="tip-icon">
+          <Icon name="spark" size={15} />
+        </span>
         <div>
-          <span className="eyebrow">时间预算</span>
-          <h1 className="page-title">像管理钱一样管理时间</h1>
-          <p className="page-sub">
-            {fmtDateCN(week.from)} — {fmtDateCN(week.to)} · 本周可用 {fmtMinutes(available)}（已扣除睡眠预算）
+          <strong>预算是参考，不是另一种压力</strong>
+          <p>
+            {over.length
+              ? `本周「${over.map((o) => o.label).join('、')}」超出预算。连续多周如此，也许只是需要重新分配。`
+              : '连不好超预算时，也许只是需要重新分配，而不是更用力地自律。'}
           </p>
         </div>
-        <div className="topbar-actions">
-          <Button
-            onClick={() => CATEGORIES.forEach((c) => setBudget(c.id, RECOMMENDED[c.id]))}
-          >
-            恢复推荐预算
-          </Button>
-        </div>
       </div>
 
-      <div className="split" style={{ marginBottom: 16 }}>
-        <Card>
-          <SectionHead title="本周使用情况" hint="实际记录 vs 周预算" action={<Tag tone={over.length ? 'warn' : 'good'}>{over.length ? `${over.length} 项透支` : '预算内'}</Tag>} />
-          <div className="row wrap" style={{ gap: 28, alignItems: 'center' }}>
-            <Donut
-              slices={slices}
-              total={totalSpent}
-              size={188}
-              thickness={19}
-              centerTop="本周已记录"
-              centerMain={fmtMinutes(totalSpent)}
-              centerSub={`预算 ${fmtMinutes(totalBudget)}`}
-            />
-            <div className="row" style={{ gap: 26, flexWrap: 'wrap' }}>
-              <Stat label="预算总额" value={fmtMinutes(totalBudget)} hint="含睡眠 56h" />
-              <Stat
-                label="剩余额度"
-                value={fmtMinutes(Math.max(0, totalBudget - totalSpent))}
-                tone={totalSpent > totalBudget ? 'bad' : 'good'}
-                hint={totalSpent > totalBudget ? `已超出 ${fmtMinutes(totalSpent - totalBudget)}` : '仍在预算内'}
-              />
-              <Stat
-                label="执行进度"
-                value={`${totalBudget ? Math.round((totalSpent / totalBudget) * 100) : 0}%`}
-                hint="按周计算"
-              />
-            </div>
-          </div>
-        </Card>
-
-        <Card tint>
-          <SectionHead title="透支分析" hint="借鉴银行逻辑" />
-          {over.length === 0 ? (
-            <p className="muted" style={{ fontSize: 13, lineHeight: 1.8 }}>
-              本周所有类别都在预算内。预算不是限制，而是你对自己时间的一次预先承诺。
-            </p>
-          ) : (
-            <div className="stack" style={{ gap: 12 }}>
-              {over.map((r) => (
-                <div key={r.id}>
-                  <div className="row between">
-                    <span style={{ fontSize: 13 }}>{r.label}时间透支</span>
-                    <strong style={{ color: 'var(--bad)', fontFamily: 'var(--serif)', fontSize: 20 }}>
-                      {fmtMinutes(r.spent - r.budget)}
-                    </strong>
-                  </div>
-                  <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                    预算 {fmtMinutes(r.budget)}，实际 {fmtMinutes(r.spent)}。如果连续多周如此，可能说明预算低于真实需求，而不是你不够自律。
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="notice" style={{ marginTop: 14 }}>
-            <Icon name="spark" size={15} />
-            <span>预算可以随时调整 —— 它不是用来惩罚你的。</span>
-          </div>
-        </Card>
-      </div>
-
-      <Card>
-        <SectionHead
-          title="分类预算"
-          hint="点击 − / + 以 30 分钟为单位调整"
-          action={<Tag tone="neutral">每周</Tag>}
-        />
-        {rows.map((r) => {
-          const pct = r.budget ? Math.min(1, r.ratio) : 0
-          const isOver = r.budget > 0 && r.spent > r.budget
-          return (
-            <div key={r.id} className={`budget-row ${isOver ? 'budget-over' : ''}`}>
-              <span className="dot" style={{ background: r.color }} />
-              <span className="budget-name">{r.label}</span>
-              <div>
-                <div className="progress" style={{ height: 7 }}>
-                  <span
-                    style={{
-                      width: `${pct * 100}%`,
-                      background: isOver ? 'var(--bad)' : r.color,
-                    }}
-                  />
-                </div>
-                <div className="row between" style={{ marginTop: 5 }}>
-                  <span className="faint" style={{ fontSize: 11.5 }}>
-                    {isOver ? `超出 ${fmtMinutes(r.spent - r.budget)}` : `剩余 ${fmtMinutes(Math.max(0, r.left))}`}
-                  </span>
-                  <span className="faint" style={{ fontSize: 11.5 }}>
-                    {Math.round(r.ratio * 100)}%
-                  </span>
-                </div>
-              </div>
-              <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                <button
-                  className="icon-btn"
-                  onClick={() => setBudget(r.id, Math.max(0, r.budget - 30))}
-                  aria-label={`减少${r.label}预算`}
-                >
-                  −
-                </button>
-                <span className="budget-num" style={{ width: 74, textAlign: 'center' }}>
-                  <b>{fmtMinutes(r.budget)}</b>
-                </span>
-                <button
-                  className="icon-btn"
-                  onClick={() => setBudget(r.id, r.budget + 30)}
-                  aria-label={`增加${r.label}预算`}
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          )
-        })}
-      </Card>
-
-      <p className="faint" style={{ fontSize: 11.5, marginTop: 16 }}>
-        已用时间来自「时间记录」，口径为本周一 00:00 至周日 24:00。
+      <p className="footnote">
+        {editing
+          ? '点击 − / + 以 30 分钟为单位调整，调整会立即保存。'
+          : `已用时间来自「时间记录」，口径为 ${week.from} 至 ${week.to}。`}
       </p>
+
+      <div style={{ marginTop: 12 }}>
+        <Button
+          block
+          onClick={() => CATEGORIES.forEach((c) => setBudget(c.id, RECOMMENDED[c.id]))}
+        >
+          恢复推荐预算
+        </Button>
+      </div>
     </div>
   )
 }

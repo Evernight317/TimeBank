@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
 import { CATEGORY_MAP } from '../data/categories'
 import { useApp } from '../lib/store'
-import { addDays, fmtDateCN, fmtMinutes, fmtSigned, fromISODate, relativeDayLabel, toISODate, todayISO, weekdayLabel } from '../lib/date'
-import { Button, Card, Empty, SectionHead, Stat, Tag } from '../components/ui'
+import { fmtDateCN, fmtMinutes, fmtSigned, fromISODate, relativeDayLabel, toISODate, todayISO, weekdayLabel, addDays } from '../lib/date'
+import { SubHeader, PageHead } from '../components/nav'
+import { Button, Empty } from '../components/ui'
 import { DayTimeline } from '../components/timeline'
 import { Icon } from '../components/icons'
 
 export function ReplayPage() {
   const { state } = useApp()
-  const [date, setDate] = useState(todayISO())
+  const yesterday = toISODate(addDays(new Date(), -1))
+  const [date, setDate] = useState(yesterday)
 
   const dayTasks = useMemo(
     () => state.tasks.filter((t) => t.date === date).sort((a, b) => a.start.localeCompare(b.start)),
@@ -19,9 +21,10 @@ export function ReplayPage() {
     [state.logs, date],
   )
 
-  const plannedMinutes = dayTasks.reduce((s, t) => s + t.plannedMinutes, 0)
-  const actualMinutes = dayLogs.reduce((s, l) => s + l.minutes, 0)
-  const delta = actualMinutes - plannedMinutes
+  const planned = dayTasks.reduce((s, t) => s + t.plannedMinutes, 0)
+  const actual = dayLogs.reduce((s, l) => s + l.minutes, 0)
+  const delta = actual - planned
+  const done = dayTasks.filter((t) => t.status === 'done').length
 
   const deviations = dayTasks
     .map((t) => {
@@ -31,193 +34,135 @@ export function ReplayPage() {
     .filter((x): x is NonNullable<typeof x> => Boolean(x))
     .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
 
+  const unlogged = dayTasks.filter((t) => !state.logs.some((l) => l.taskId === t.id))
   const shift = (n: number) => setDate(toISODate(addDays(fromISODate(date), n)))
 
-  const narrative = (() => {
-    if (!dayTasks.length && !dayLogs.length) return null
-    const biggest = deviations[0]
-    const parts: string[] = []
-    if (biggest && Math.abs(biggest.diff) >= 10) {
-      parts.push(
-        `偏差最大的是「${biggest.task.title}」：计划 ${fmtMinutes(
-          biggest.task.plannedMinutes,
-        )}，实际 ${fmtMinutes(biggest.log.minutes)}（${fmtSigned(biggest.diff)}）。`,
-      )
-    }
-    if (dayTasks.length) {
-      const done = dayTasks.filter((t) => t.status === 'done').length
-      parts.push(`当天 ${dayTasks.length} 项安排中完成了 ${done} 项。`)
-    }
-    const unlogged = dayTasks.filter((t) => !state.logs.some((l) => l.taskId === t.id))
-    if (unlogged.length) {
-      parts.push(`还有 ${unlogged.length} 项没有对应记录，它们的时间去向仍然是未知的。`)
-    }
-    return parts.join('')
-  })()
-
   return (
-    <div className="page">
-      <div className="topbar">
-        <div>
-          <span className="eyebrow">时间回放</span>
-          <h1 className="page-title">{relativeDayLabel(date)}的时间去了哪里</h1>
-          <p className="page-sub">把一天摊开来看：计划了什么，实际做了什么，偏差发生在哪一段。</p>
+    <div className="screen">
+      <SubHeader title="时间回放" onBack={() => (window.location.hash = '#/today')} />
+
+      <PageHead
+        title={`${relativeDayLabel(date)}的时间去了哪里`}
+        sub={`${fmtDateCN(date, true)} · ${weekdayLabel(date)}`}
+      />
+
+      <div className="row" style={{ gap: 6 }}>
+        <Button size="sm" onClick={() => shift(-1)} aria-label="前一天">
+          ←
+        </Button>
+        <input
+          className="input"
+          type="date"
+          style={{ flex: 1, padding: '8px 10px', fontSize: 12 }}
+          value={date}
+          onChange={(e) => e.target.value && setDate(e.target.value)}
+        />
+        <Button size="sm" onClick={() => shift(1)} disabled={date >= todayISO()} aria-label="后一天">
+          →
+        </Button>
+      </div>
+
+      <div className="metric-grid">
+        <div className="metric-cell">
+          <div className="k">计划投入</div>
+          <div className="v">{fmtMinutes(planned)}</div>
+          <div className="d">{dayTasks.length} 项安排</div>
         </div>
-        <div className="topbar-actions">
-          <Button size="sm" onClick={() => shift(-1)}>
-            ←
-          </Button>
-          <input
-            className="input"
-            type="date"
-            style={{ width: 158 }}
-            value={date}
-            onChange={(e) => e.target.value && setDate(e.target.value)}
-          />
-          <Button size="sm" onClick={() => shift(1)} disabled={date >= todayISO()}>
-            →
-          </Button>
-          <Button size="sm" variant="quiet" onClick={() => setDate(todayISO())}>
-            今天
-          </Button>
+        <div className="metric-cell">
+          <div className="k">实际记录</div>
+          <div className="v">{fmtMinutes(actual)}</div>
+          <div className="d">{dayLogs.length} 条记录</div>
+        </div>
+        <div className="metric-cell">
+          <div className="k">计划与实际之差</div>
+          <div className="v" style={{ color: delta > 0 ? 'var(--amber)' : 'var(--green)' }}>
+            {fmtSigned(delta)}
+          </div>
+          <div className="d">{delta > 0 ? '实际比计划更久' : '实际比计划更短'}</div>
+        </div>
+        <div className="metric-cell">
+          <div className="k">完成率</div>
+          <div className="v">{dayTasks.length ? `${Math.round((done / dayTasks.length) * 100)}%` : '—'}</div>
+          <div className="d">{done} / {dayTasks.length}</div>
         </div>
       </div>
 
-      <div className="grid grid-4" style={{ marginBottom: 16 }}>
-        <Card>
-          <Stat label="计划投入" value={fmtMinutes(plannedMinutes)} hint={`${dayTasks.length} 项安排`} />
-        </Card>
-        <Card>
-          <Stat label="实际记录" value={fmtMinutes(actualMinutes)} hint={`${dayLogs.length} 条记录`} />
-        </Card>
-        <Card>
-          <Stat
-            label="计划与实际之差"
-            value={fmtSigned(delta)}
-            hint={delta > 0 ? '实际比计划更久' : delta < 0 ? '实际比计划更短' : '完全吻合'}
-            tone={delta > 0 ? 'warn' : delta < 0 ? 'good' : 'default'}
-          />
-        </Card>
-        <Card>
-          <Stat
-            label="完成率"
-            value={
-              dayTasks.length
-                ? `${Math.round((dayTasks.filter((t) => t.status === 'done').length / dayTasks.length) * 100)}%`
-                : '—'
-            }
-            hint={dayTasks.length ? '已完成 / 已安排' : '无安排'}
-          />
-        </Card>
-      </div>
+      <section className="block">
+        <div className="block-head">
+          <h2>一天的时间轴</h2>
+          <span className="meta">上排计划 · 下排实际</span>
+        </div>
+        <div className="card">
+          {dayTasks.length + dayLogs.length === 0 ? (
+            <Empty title="这一天还没有痕迹" hint="换一个日期，或先去记录几笔时间。" />
+          ) : (
+            <DayTimeline date={date} tasks={state.tasks} logs={state.logs} height={30} />
+          )}
+        </div>
+      </section>
 
-      <div className="split">
-        <div className="stack">
-          <Card>
-            <SectionHead
-              title={`${fmtDateCN(date, true)} · ${weekdayLabel(date)}`}
-              hint="上排为计划，下排为实际"
-              action={<Tag tone="accent">24h</Tag>}
-            />
-            {dayTasks.length + dayLogs.length === 0 ? (
-              <Empty
-                title="这一天还没有痕迹"
-                hint="换一个日期，或先去记录几笔时间。"
-              />
-            ) : (
-              <DayTimeline date={date} tasks={state.tasks} logs={state.logs} height={38} />
-            )}
-          </Card>
-
-          <Card>
-            <SectionHead title="偏差明细" hint="实际用时 − 计划用时，按影响排序" />
-            {deviations.length === 0 ? (
-              <p className="muted" style={{ fontSize: 13 }}>
-                没有可对比的记录。完成计划时顺手记录实际用时，这里才有内容。
-              </p>
-            ) : (
-              deviations.map(({ task, log, diff }) => {
-                const cat = CATEGORY_MAP[task.category]
-                return (
-                  <div key={task.id} className="row between" style={{ padding: '10px 0', borderBottom: '1px solid var(--line-soft)' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="task-title">
-                        <span className="dot" style={{ background: cat.color, display: 'inline-block', marginRight: 7 }} />
-                        {task.title}
-                      </div>
-                      <div className="task-meta">
-                        {task.start} 开始 · 计划 {fmtMinutes(task.plannedMinutes)} · 实际{' '}
-                        {fmtMinutes(log.minutes)}
-                      </div>
+      {deviations.length > 0 && (
+        <section className="block">
+          <div className="block-head">
+            <h2>偏差明细</h2>
+            <span className="meta">按影响排序</span>
+          </div>
+          <div className="card">
+            {deviations.map(({ task, log, diff }) => {
+              const cat = CATEGORY_MAP[task.category]
+              return (
+                <div
+                  key={task.id}
+                  className="row between"
+                  style={{ padding: '10px 0', borderBottom: '1px solid var(--line-soft)' }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div className="sched-title" style={{ fontSize: 12.5 }}>
+                      <i style={{ background: cat.color }} />
+                      <span>{task.title}</span>
                     </div>
-                    <Tag tone={Math.abs(diff) < 10 ? 'good' : diff > 0 ? 'warn' : 'accent'}>
-                      {fmtSigned(diff)}
-                    </Tag>
+                    <div className="task-meta">
+                      {task.start} · 计划 {fmtMinutes(task.plannedMinutes)} · 实际 {fmtMinutes(log.minutes)}
+                    </div>
                   </div>
-                )
-              })
-            )}
-          </Card>
-        </div>
+                  <span className={`pill ${Math.abs(diff) < 10 ? 'pill-done' : diff > 0 ? 'pill-warn' : 'pill-idle'}`}>
+                    {fmtSigned(diff)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
-        <div className="stack">
-          <Card>
-            <SectionHead title="这一天说明了什么" />
-            {narrative ? (
-              <p style={{ fontSize: 13.5, lineHeight: 1.85, color: 'var(--ink-2)' }}>{narrative}</p>
-            ) : (
-              <p className="muted" style={{ fontSize: 13 }}>
-                选一个你有记录的日期，这里会自动生成一句总结。
-              </p>
-            )}
-            <div className="notice" style={{ marginTop: 16 }}>
-              <Icon name="spark" size={15} />
-              <span>回放的意义不是评判这一天，而是让下一次的估计更接近现实。</span>
-            </div>
-          </Card>
-
-          <Card>
-            <SectionHead title="当天的实际构成" hint="按类别汇总" />
-            {dayLogs.length === 0 ? (
-              <p className="muted" style={{ fontSize: 13 }}>
-                暂无记录
-              </p>
-            ) : (
-              <div className="stack" style={{ gap: 10 }}>
-                {Object.entries(
-                  dayLogs.reduce<Record<string, number>>((acc, l) => {
-                    acc[l.category] = (acc[l.category] ?? 0) + l.minutes
-                    return acc
-                  }, {}),
-                )
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([c, m]) => {
-                    const cat = CATEGORY_MAP[c as keyof typeof CATEGORY_MAP]
-                    return (
-                      <div key={c}>
-                        <div className="row between" style={{ fontSize: 12.5, marginBottom: 4 }}>
-                          <span className="row" style={{ gap: 6 }}>
-                            <span className="dot" style={{ background: cat.color }} />
-                            {cat.label}
-                          </span>
-                          <span className="num muted">{fmtMinutes(m)}</span>
-                        </div>
-                        <div className="progress" style={{ height: 5 }}>
-                          <span
-                            style={{
-                              width: `${(m / actualMinutes) * 100}%`,
-                              background: cat.color,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-              </div>
-            )}
-          </Card>
+      <div className="tip" style={{ marginTop: 14 }}>
+        <span className="tip-icon">
+          <Icon name="spark" size={15} />
+        </span>
+        <div>
+          <strong>这一天说明了什么</strong>
+          <p>
+            {deviations[0] && Math.abs(deviations[0].diff) >= 10
+              ? `偏差最大的是「${deviations[0].task.title}」：计划 ${fmtMinutes(
+                  deviations[0].task.plannedMinutes,
+                )}，实际 ${fmtMinutes(deviations[0].log.minutes)}。`
+              : '这一天的计划与实际比较接近，说明你的估算正在变准。'}
+            {dayTasks.length
+              ? `当天 ${dayTasks.length} 项安排完成了 ${done} 项。`
+              : ''}
+            {unlogged.length ? `还有 ${unlogged.length} 项没有对应记录。` : ''}
+          </p>
         </div>
       </div>
+
+      <div style={{ marginTop: 14 }}>
+        <Button block onClick={() => (window.location.hash = '#/records')}>
+          <Icon name="records" size={15} />
+          查看时间记录
+        </Button>
+      </div>
+
+      <p className="footnote">回放的意义不是评判这一天，而是让下一次的估计更接近现实。</p>
     </div>
   )
 }

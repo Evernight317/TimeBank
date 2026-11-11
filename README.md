@@ -8,16 +8,18 @@
 
 ## 界面预览
 
-| 今日 · 24 小时资产 | 时间洞察 |
-| --- | --- |
-| ![今日](docs/screenshots/today.png) | ![时间洞察](docs/screenshots/insights.png) |
+移动端优先设计，5 个主 Tab：**今日 / 资产 / 洞察 / 预算 / 我的**，桌面端会居中呈现为 App 视图。
 
-| 时间资产 | 个人时间画像 |
-| --- | --- |
-| ![时间资产](docs/screenshots/assets.png) | ![时间画像](docs/screenshots/persona.png) |
+| 今日 | 创建日程 | 时间资产 |
+| --- | --- | --- |
+| ![今日](docs/screenshots/today.png) | ![创建日程](docs/screenshots/create.png) | ![时间资产](docs/screenshots/assets.png) |
+
+| 时间洞察 | 时间预算 | 个人时间画像 |
+| --- | --- | --- |
+| ![时间洞察](docs/screenshots/insights.png) | ![时间预算](docs/screenshots/budget.png) | ![时间画像](docs/screenshots/me.png) |
 
 <p align="center">
-  <img src="docs/screenshots/mobile.png" width="300" alt="移动端" />
+  <img src="docs/screenshots/desktop.png" width="820" alt="桌面端" />
 </p>
 
 ---
@@ -58,7 +60,17 @@ npx tsx scripts/nlp-check.ts
 - **时间回放**：一天的计划 / 实际双轨时间轴 + 偏差明细 + 自动总结
 - **时间预算与透支**：按周分配预算，实时显示已用 / 剩余 / 透支，可手动调整
 - **计划 vs 实际**可视化对比
-- 移动端适配（底部导航）
+- **移动端优先**：5 Tab 底部导航，桌面端自动居中为 App 视图
+
+界面结构：
+
+```
+今日      可支配余额 + 今日日程 + 一项缓冲建议
+资产      24h 环形图 + 时间流向（日 / 周视图）
+洞察      编号式洞察卡（本周洞察 / 每日回顾）
+预算      可支配时间 + 分类预算与透支
+我的      高效时段、专注时长、估算准确度、时间黑洞
+```
 
 ---
 
@@ -138,9 +150,9 @@ src/
 │  ├─ insights.ts      # 洞察生成与规则
 │  ├─ nlp.ts           # 中文自然语言日程解析
 │  └─ store.tsx        # 全局状态 + localStorage
-├─ pages/              # 今日 / 日程 / 记录 / 资产 / 回放 / 洞察 / 预算 / 画像 / 设置
+├─ pages/              # 今日 / 创建日程 / 记录 / 资产 / 回放 / 洞察 / 预算 / 我的 / 设置
 ├─ App.tsx             # 布局与 hash 路由
-└─ styles.css          # 设计系统
+└─ styles.css          # 移动端设计系统（深藏青主卡 + 5 Tab）
 ```
 
 ---

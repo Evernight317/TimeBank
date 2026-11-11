@@ -6,7 +6,7 @@ export function Card({
   className = '',
   style,
   tint = false,
-  as: As = 'section',
+  as: As = 'div',
 }: {
   children: ReactNode
   className?: string
@@ -31,10 +31,10 @@ export function SectionHead({
   action?: ReactNode
 }) {
   return (
-    <div className="section-head">
-      <div>
+    <div className="block-head">
+      <div className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <h2>{title}</h2>
-        {hint && <p className="hint">{hint}</p>}
+        {hint && <span className="meta">{hint}</span>}
       </div>
       {action}
     </div>
@@ -73,16 +73,38 @@ export function Tag({
   children: ReactNode
   tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'accent'
 }) {
-  return <span className={`tag tag-${tone}`}>{children}</span>
+  const cls =
+    tone === 'good'
+      ? 'pill pill-done'
+      : tone === 'warn'
+        ? 'pill pill-warn'
+        : tone === 'bad'
+          ? 'pill pill-bad'
+          : tone === 'accent'
+            ? 'pill pill-navy'
+            : 'pill pill-idle'
+  return <span className={cls}>{children}</span>
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'ghost' | 'quiet' | 'danger'
   size?: 'sm' | 'md'
+  block?: boolean
 }
 
-export function Button({ variant = 'ghost', size = 'md', className = '', ...rest }: ButtonProps) {
-  return <button className={`btn btn-${variant} btn-${size} ${className}`} {...rest} />
+export function Button({
+  variant = 'ghost',
+  size = 'md',
+  block = false,
+  className = '',
+  ...rest
+}: ButtonProps) {
+  return (
+    <button
+      className={`btn btn-${variant} btn-${size} ${block ? 'btn-block' : ''} ${className}`}
+      {...rest}
+    />
+  )
 }
 
 export function Empty({
@@ -125,27 +147,33 @@ export function Modal({
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
   }, [open, onClose])
 
   if (!open) return null
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div
-        className={`modal ${wide ? 'modal-wide' : ''}`}
+        className="sheet"
+        style={wide ? { maxWidth: 520 } : undefined}
         onMouseDown={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <header className="modal-head">
+        <header className="sheet-head">
           <h3>{title}</h3>
           <button className="icon-btn" onClick={onClose} aria-label="关闭">
             ✕
           </button>
         </header>
-        <div className="modal-body">{children}</div>
-        {footer && <footer className="modal-foot">{footer}</footer>}
+        <div className="sheet-body">{children}</div>
+        {footer && <footer className="sheet-foot">{footer}</footer>}
       </div>
     </div>
   )
@@ -214,7 +242,7 @@ export function Progress({
       <span
         style={{
           width: `${ratio * 100}%`,
-          background: color ?? 'var(--accent)',
+          background: color ?? 'var(--green)',
         }}
       />
     </div>
